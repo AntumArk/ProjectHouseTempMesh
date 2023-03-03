@@ -12,24 +12,22 @@
 */
 // Import required libraries
 #include <Arduino.h>
-#include <WiFi.h>
-#include <AsyncTCP.h>
+#include <ESP8266WiFi.h>
+#include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include "SPIFFS.h"
+#include "LittleFS.h"
 #include <Arduino_JSON.h>
 #include <AsyncElegantOTA.h>
 #include <WiFiSettings.h>
 
 
-
-
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <MQTT.h>
-#define Sprintf(f, ...) ({ char* s; asprintf(&s, f, __VA_ARGS__); String r = s; free(s); r; })
+//#define Sprintf(f, ...) ({ char* s; asprintf(&s, f, __VA_ARGS__); String r = s; free(s); r; })
 
-const int buttonpin  = 0;
-const int onewirepin = 4;
+const int deepSleepPin  = 16;
+const int onewirepin = 5;
 OneWire ds(onewirepin);
 DallasTemperature sensors(&ds);
 WiFiClient wificlient;
@@ -38,7 +36,7 @@ MQTTClient mqtt;
 int    num_sensors;
 String topic;
 bool   publish_all;
-
+char apName[11];
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
@@ -54,7 +52,7 @@ int outputGPIOs[NUM_OUTPUTS] = {2, 4, 12, 14};
 
 // Initialize SPIFFS
 void initSPIFFS() {
-  if (!SPIFFS.begin(true)) {
+  if (!LittleFS.begin()) {
     Serial.println("An error has occurred while mounting SPIFFS");
   }
   Serial.println("SPIFFS mounted successfully");
@@ -62,28 +60,16 @@ void initSPIFFS() {
 
 // Initialize WiFi
 void initWiFi() {
-  char apName[11];
-  uint32_t chipId = 0;
-  //ESP32 only
-  for(int i=0; i<17; i=i+8) {
-	  chipId |= ((ESP.getEfuseMac() >> (40 - i)) & 0xff) << i;
-	}
-  sprintf(apName, "ESP-%06X", chipId);
+  sprintf(apName, "ESP-%06X", ESP.getChipId());
   WiFiSettings.hostname = apName;
 
-String server = WiFiSettings.string("mqtt_server", 64, "test.mosquitto.org");
+String server = WiFiSettings.string("mqtt_server", 64, "broker.lan");
     int port      = WiFiSettings.integer("mqtt_port", 0, 65535, 1883);
     topic         = WiFiSettings.string("mqtt_topic", "thermo");
     num_sensors   = WiFiSettings.integer("num_sensors", 1);
     publish_all   = WiFiSettings.checkbox("publish_all", true);
 
-    // for (int i = 0; i < 1000; i++) {
-    //     if (!digitalRead(onewirepin)) WiFiSettings.portal();
-    //     delay(1);
-    // }
-
-
-  WiFiSettings.connect();
+   WiFiSettings.connect(true,15);
   while (WiFi.status() != WL_CONNECTED)
     {
         Serial.print('.');
@@ -147,47 +133,62 @@ void initWebSocket() {
 }
 
 void setup(){
+  //pinMode(deepSleepPin,OUTPUT);
+  //pinMode(2,OUTPUT);
+  //digitalWrite(2,HIGH);
+  //digitalWrite(deepSleepPin,HIGH);
   // Serial port for debugging purposes
-  Serial.begin(115200);
- sensors.begin();
-  // Set GPIOs as outputs
-  for (int i =0; i<NUM_OUTPUTS; i++){
+    for (int i =0; i<NUM_OUTPUTS; i++){
     pinMode(outputGPIOs[i], OUTPUT);
   }
+  
+  Serial.begin(115200);
+  Serial.println("Whoop1");
+ sensors.begin();
+ Serial.println("Whoop2");
   initSPIFFS();
+  Serial.println("Whoop3");
   initWiFi();
+  Serial.println("Whoop4");
   initWebSocket();
+Serial.println("Whoop5");
 
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(SPIFFS, "/index.html", "text/html",false);
+    request->send(LittleFS, "/index.html", "text/html",false);
   });
 
-  server.serveStatic("/", SPIFFS, "/");
+  server.serveStatic("/", LittleFS, "/");
 
   // Start ElegantOTA
   AsyncElegantOTA.begin(&server);
-  
+  Serial.println("Whoop6");
   // Start server
   server.begin();
 }
 
 void loop() {
-  ws.cleanupClients();
+  Serial.println("Whoop?");
+   ws.cleanupClients();
    while (!mqtt.connected()) {
         if (!mqtt.connect("")) delay(500);
+        else{
+          mqtt.publish(topic + "/device", apName);
+        }
     }
     sensors.requestTemperatures();
     String all = "";
     for (int i = 0; i < num_sensors; i++) {
         float C = sensors.getTempCByIndex(i);
+        char text[5]="";
+        sprintf(text,"%.2f", C);
         Serial.printf("%d: %.2f\n", i, C);
-        mqtt.publish(topic + "/" + i, Sprintf("%.2f", C));
+        mqtt.publish(topic + "/" + i, text);
         if (all.length()) all += ";";
-        all += Sprintf("%.2f", C);
+        all += text;
         delay(100);
     }
     if (publish_all) mqtt.publish(topic + "/all", all);
 
-    delay(1000 - num_sensors * 100);
+    delay(5000 - num_sensors * 100);
 }
