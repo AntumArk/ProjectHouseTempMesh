@@ -20,6 +20,26 @@
 #include <AsyncElegantOTA.h>
 #include <WiFiSettings.h>
 
+
+
+
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <MQTT.h>
+#define Sprintf(f, ...) ({ char* s; asprintf(&s, f, __VA_ARGS__); String r = s; free(s); r; })
+
+const int buttonpin  = 0;
+const int onewirepin = 4;
+OneWire ds(onewirepin);
+DallasTemperature sensors(&ds);
+WiFiClient wificlient;
+MQTTClient mqtt;
+
+int    num_sensors;
+String topic;
+bool   publish_all;
+
+
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
@@ -50,6 +70,19 @@ void initWiFi() {
 	}
   sprintf(apName, "ESP-%06X", chipId);
   WiFiSettings.hostname = apName;
+
+String server = WiFiSettings.string("mqtt_server", 64, "test.mosquitto.org");
+    int port      = WiFiSettings.integer("mqtt_port", 0, 65535, 1883);
+    topic         = WiFiSettings.string("mqtt_topic", "thermo");
+    num_sensors   = WiFiSettings.integer("num_sensors", 1);
+    publish_all   = WiFiSettings.checkbox("publish_all", true);
+
+    // for (int i = 0; i < 1000; i++) {
+    //     if (!digitalRead(onewirepin)) WiFiSettings.portal();
+    //     delay(1);
+    // }
+
+
   WiFiSettings.connect();
   while (WiFi.status() != WL_CONNECTED)
     {
@@ -57,6 +90,8 @@ void initWiFi() {
         delay(10);
     }
   Serial.println(WiFi.localIP());
+  
+    mqtt.begin(server.c_str(), port, wificlient);
 }
 
 String getOutputStates(){
@@ -114,7 +149,7 @@ void initWebSocket() {
 void setup(){
   // Serial port for debugging purposes
   Serial.begin(115200);
-
+ sensors.begin();
   // Set GPIOs as outputs
   for (int i =0; i<NUM_OUTPUTS; i++){
     pinMode(outputGPIOs[i], OUTPUT);
@@ -139,4 +174,20 @@ void setup(){
 
 void loop() {
   ws.cleanupClients();
+   while (!mqtt.connected()) {
+        if (!mqtt.connect("")) delay(500);
+    }
+    sensors.requestTemperatures();
+    String all = "";
+    for (int i = 0; i < num_sensors; i++) {
+        float C = sensors.getTempCByIndex(i);
+        Serial.printf("%d: %.2f\n", i, C);
+        mqtt.publish(topic + "/" + i, Sprintf("%.2f", C));
+        if (all.length()) all += ";";
+        all += Sprintf("%.2f", C);
+        delay(100);
+    }
+    if (publish_all) mqtt.publish(topic + "/all", all);
+
+    delay(1000 - num_sensors * 100);
 }
