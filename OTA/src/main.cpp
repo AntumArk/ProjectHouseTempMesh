@@ -24,10 +24,13 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <MQTT.h>
+
+#include "battery.h"
 //#define Sprintf(f, ...) ({ char* s; asprintf(&s, f, __VA_ARGS__); String r = s; free(s); r; })
 
 const int deepSleepPin  = 16;
 const int onewirepin = 5;
+
 OneWire ds(onewirepin);
 DallasTemperature sensors(&ds);
 WiFiClient wificlient;
@@ -189,6 +192,7 @@ void loop() {
         delay(100);
     }
     if (publish_all) mqtt.publish(topic + "/all", all);
-
+    
+    mqtt.publish(topic + "/device/"+apName+"/battery", String(GetBatteryPercentage()));
     delay(5000 - num_sensors * 100);
 }
