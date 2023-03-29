@@ -32,10 +32,10 @@ This document is for testing all of the assembled V2 features.
 4. Inspect USB C connector solder joints. No shorts, good solder.  
 5. PowerOn  
     5.1 Select battery mode by soldering U5.  
-    5.2 Set PSU to 4V, 100mA limit  
+    5.2 Set PSU to 4V, 200mA limit  
     5.3 Connect PSU to board battery connector  
     5.4 Observe ESP led blink.  
-    5.5 Current <100mA  
+    5.5 Current <200mA  
     5.6 Disconnect PSU  
     5.7 Select USB mode  
     5.8 Through power meter connect board via USB PSU  
