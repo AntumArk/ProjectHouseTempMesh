@@ -106,7 +106,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
     }
     else{
       int gpio = atoi((char*)data);
-      digitalWrite(gpio, !digitalRead(gpio));
+      //digitalWrite(gpio, !digitalRead(gpio));
       notifyClients(getOutputStates());
     }
   }
@@ -142,7 +142,7 @@ void setup(){
   //digitalWrite(deepSleepPin,HIGH);
   // Serial port for debugging purposes
     for (int i =0; i<NUM_OUTPUTS; i++){
-    pinMode(outputGPIOs[i], OUTPUT);
+   // pinMode(outputGPIOs[i], OUTPUT);
   }
   
   Serial.begin(115200);
@@ -192,7 +192,10 @@ void loop() {
         delay(100);
     }
     if (publish_all) mqtt.publish(topic + "/all", all);
-    
-    mqtt.publish(topic + "/device/"+apName+"/battery", String(GetBatteryPercentage()));
+    int bat=GetBatteryPercentage();
+    Serial.print("bat ");
+    Serial.println( String(bat));
+    mqtt.publish(topic + "/device/"+apName+"/battery", String(bat));
+    mqtt.publish(topic + "/device/"+apName+"/batteryV", String(GetBatteryVoltage(),2));
     delay(5000 - num_sensors * 100);
 }
